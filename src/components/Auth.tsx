@@ -1,19 +1,31 @@
 "use client";
 import { useState, useEffect } from "react";
 import { auth, googleProvider, db } from "../config/firebaseConfig";
-import { signInWithPopup, signOut } from "firebase/auth";
+import { signInWithPopup, signOut, User } from "firebase/auth";
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc } from "firebase/firestore";
 
+// User Data Type
+interface UserData {
+  id?: string;
+  name: string;
+  age: number;
+  email: string;
+  phone: string;
+  address: string;
+}
+
 export default function Auth() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
 
   // Form State
-  const [name, setName] = useState("");
-  const [age, setAge] = useState<number | string>("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
-  const [users, setUsers] = useState<any[]>([]);
+  const [formData, setFormData] = useState<UserData>({
+    name: "",
+    age: 0,
+    email: "",
+    phone: "",
+    address: "",
+  });
+  const [users, setUsers] = useState<UserData[]>([]);
 
   // Fetch Users on Login
   useEffect(() => {
@@ -40,14 +52,22 @@ export default function Auth() {
     }
   };
 
+  // Handle Input Change
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: name === "age" ? Number(value) : value }));
+  };
+
   // Add User to Firestore
   const addUser = async () => {
+    const { name, age, email, phone, address } = formData;
     if (!name || !age || !email || !phone || !address) {
       alert("Please fill all fields!");
       return;
     }
+
     try {
-      await addDoc(collection(db, "users"), { name, age, email, phone, address });
+      await addDoc(collection(db, "users"), formData);
       fetchUsers();
       resetForm();
     } catch (error) {
@@ -59,7 +79,7 @@ export default function Auth() {
   const fetchUsers = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, "users"));
-      const usersList = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const usersList = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as UserData[];
       setUsers(usersList);
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -79,7 +99,7 @@ export default function Auth() {
     try {
       await updateDoc(doc(db, "users", id), {
         name: updatedName,
-        age: updatedAge,
+        age: Number(updatedAge),
         email: updatedEmail,
         phone: updatedPhone,
         address: updatedAddress,
@@ -102,11 +122,7 @@ export default function Auth() {
 
   // Reset Form Fields
   const resetForm = () => {
-    setName("");
-    setAge("");
-    setEmail("");
-    setPhone("");
-    setAddress("");
+    setFormData({ name: "", age: 0, email: "", phone: "", address: "" });
   };
 
   return (
@@ -114,9 +130,7 @@ export default function Auth() {
       <div className="w-full max-w-5xl p-12 rounded-2xl shadow-2xl bg-gradient-to-br from-gray-900 to-gray-800">
         {!user ? (
           <div className="text-center space-y-8">
-            <h1 className="text-5xl font-extrabold text-white">
-              Login with Google
-            </h1>
+            <h1 className="text-5xl font-extrabold text-white">Login with Google</h1>
             <button
               onClick={googleLogin}
               className="w-full p-4 bg-red-600 hover:bg-red-700 rounded-lg text-lg transition duration-300"
@@ -137,49 +151,18 @@ export default function Auth() {
               Logout
             </button>
 
-            {/* Form to Add User */}
             <h3 className="text-2xl font-semibold text-white">Add User Data</h3>
             <div className="grid grid-cols-2 gap-6">
-              <input
-                type="text"
-                placeholder="Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="p-4 rounded-lg bg-gray-700 text-white text-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-
-              <input
-                type="number"
-                placeholder="Age"
-                value={age}
-                onChange={(e) => setAge(e.target.value)}
-                className="p-4 rounded-lg bg-gray-700 text-white text-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="p-4 rounded-lg bg-gray-700 text-white text-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-
-              <input
-                type="tel"
-                placeholder="Phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="p-4 rounded-lg bg-gray-700 text-white text-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-
-              <input
-                type="text"
-                placeholder="Address"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="p-4 rounded-lg bg-gray-700 text-white text-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-
+              {Object.keys(formData).map((field) => (
+                <input
+                  key={field}
+                  name={field}
+                  value={formData[field as keyof UserData]}
+                  onChange={handleChange}
+                  placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
+                  className="p-4 rounded-lg bg-gray-700 text-white text-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              ))}
               <button
                 onClick={addUser}
                 className="p-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-lg transition duration-300"
@@ -188,28 +171,18 @@ export default function Auth() {
               </button>
             </div>
 
-            {/* User List */}
             <h3 className="text-2xl font-semibold text-white">User List</h3>
             <div className="space-y-6">
               {users.map((user) => (
-                <div
-                  key={user.id}
-                  className="flex flex-col gap-4 p-6 bg-gray-700 rounded-lg"
-                >
+                <div key={user.id} className="flex flex-col gap-4 p-6 bg-gray-700 rounded-lg">
                   <span className="text-white text-lg">
                     {user.name} (Age: {user.age}) | Email: {user.email} | Phone: {user.phone} | Address: {user.address}
                   </span>
                   <div className="flex gap-4">
-                    <button
-                      onClick={() => updateUser(user.id)}
-                      className="p-3 bg-yellow-500 hover:bg-yellow-600 rounded-lg transition duration-300"
-                    >
+                    <button onClick={() => updateUser(user.id!)} className="p-3 bg-yellow-500 hover:bg-yellow-600 rounded-lg">
                       Edit
                     </button>
-                    <button
-                      onClick={() => deleteUser(user.id)}
-                      className="p-3 bg-red-600 hover:bg-red-700 rounded-lg transition duration-300"
-                    >
+                    <button onClick={() => deleteUser(user.id!)} className="p-3 bg-red-600 hover:bg-red-700 rounded-lg">
                       Delete
                     </button>
                   </div>
